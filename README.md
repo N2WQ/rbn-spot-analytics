@@ -49,10 +49,7 @@ The tool accepts RBN contest data in these formats:
 
 ### Where to Get RBN Data
 
-Download contest spot data from the RBN archive. Files are typically named like:
-- `cqww_cw_2024.zip`
-- `cqwpx_rtty_2023.zip`
-- `arrldx_cw_2024.zip`
+Download contest spot data from the RBN archive at https://www.reversebeacon.net/raw_data/
 
 ### Data Format
 
@@ -170,7 +167,7 @@ For most users, the defaults work well. Create `config.json` only if you need to
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `modes` | `["CW", "RTTY"]` | Which transmission modes to analyze |
-| `min_spotter_spots` | `100` | Minimum spots for skimmer to be included in reliability |
+| `min_spotter_spots` | `1000` | Minimum spots for skimmer to be included in reliability |
 | `min_cluster_skimmers` | `4` | Minimum skimmers to establish cluster consensus |
 | `min_cluster_share_percent` | `70.0` | Percentage agreement needed for provisional truth |
 

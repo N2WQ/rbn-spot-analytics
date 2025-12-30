@@ -59,7 +59,7 @@ class AnalysisConfig:
     output_spotter_reliability: bool = True
     output_band_priors: bool = True
     output_segment_priors: bool = True
-    min_spotter_spots: int = 100
+    min_spotter_spots: int = 1000
     output_simple_formats: bool = True
 
     # Parallelization
