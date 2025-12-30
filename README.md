@@ -2,6 +2,214 @@
 
 An offline Python tool that analyzes large volumes of RBN (Reverse Beacon Network) spot data from major CW/RTTY contests to infer true callsigns and learn decoder error patterns.
 
+## Quick Start
+
+**Most common scenario:** You have a directory of RBN contest zip files downloaded from the RBN archive.
+
+```bash
+# 1. Install the tool
+pip install -e .
+
+# 2. Run analysis on your directory of zip files (auto-detect CPU cores)
+rbn-train --input /path/to/rbn_logs/ --output-dir output/ --workers 0
+```
+
+That's it. The tool will:
+- Automatically extract all `.zip` files in the directory
+- Process all contest data (CW and RTTY spots)
+- Generate output files in the `output/` directory
+
+**Processing time:** Expect ~1 hour per million spots on a modern multi-core machine.
+
+## Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/N2WQ/rbn-spot-analytics.git
+cd rbn-spot-analytics
+
+# Install in development mode
+pip install -e .
+```
+
+### Requirements
+
+- Python 3.10+
+- pandas >= 2.0.0
+- numpy >= 1.24.0
+
+## Input Data
+
+### Supported Formats
+
+The tool accepts RBN contest data in these formats:
+- **ZIP archives** (most common) - automatically extracted
+- **CSV files** - whitespace or comma-separated
+- **Directories** - scans for all zip/csv files
+
+### Where to Get RBN Data
+
+Download contest spot data from the RBN archive. Files are typically named like:
+- `cqww_cw_2024.zip`
+- `cqwpx_rtty_2023.zip`
+- `arrldx_cw_2024.zip`
+
+### Data Format
+
+RBN files contain whitespace-separated columns including:
+- `callsign` - Skimmer station that heard the signal
+- `dx` - Decoded callsign (what we're analyzing)
+- `freq` - Frequency in kHz
+- `band` - Amateur band (20m, 40m, etc.)
+- `tx_mode` - Transmission mode (CW, RTTY)
+- `db` - Signal-to-noise ratio
+
+## Command Reference
+
+### Basic Syntax
+
+```bash
+rbn-train --input <INPUT> --output-dir <OUTPUT> [--workers N] [--config FILE]
+```
+
+### Arguments
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `--input` | Yes | Directory of zip files, single file, or glob pattern |
+| `--output-dir` | Yes | Directory for output files (created if doesn't exist) |
+| `--workers` | No | Number of CPU cores to use (default: 1, use 0 for auto-detect) |
+| `--config` | No | Path to JSON configuration file |
+
+### Examples
+
+```bash
+# Process all zip files in a directory (RECOMMENDED)
+rbn-train --input /path/to/rbn_logs/ --output-dir output/ --workers 0
+
+# Process a single zip file
+rbn-train --input cqww_cw_2024.zip --output-dir output/ --workers 0
+
+# Process specific files with glob pattern
+rbn-train --input "rbn_logs/cqww_*.zip" --output-dir output/ --workers 0
+
+# Use specific number of workers (e.g., 4 cores)
+rbn-train --input rbn_logs/ --output-dir output/ --workers 4
+
+# Sequential processing (single core, slower but uses less memory)
+rbn-train --input rbn_logs/ --output-dir output/ --workers 1
+```
+
+## Parallel Processing
+
+### Recommended Settings
+
+| System | Recommended `--workers` |
+|--------|-------------------------|
+| Any system | `0` (auto-detect) |
+| 4-core CPU | `3` or `4` |
+| 8-core CPU | `6` or `7` |
+| Low memory (<8GB RAM) | `1` or `2` |
+
+### What Gets Parallelized
+
+- Cluster consensus computation
+- Stability-based truth refinement
+- Confusion model building
+- Spotter reliability calculation
+
+### Performance Tips
+
+- Use `--workers 0` to automatically use (CPU cores - 1)
+- Data loading is sequential (I/O bound), parallelization helps with analysis
+- Memory usage scales with worker count (~500MB per worker)
+- For very large datasets (50M+ spots), use fewer workers to avoid memory issues
+
+## Output Files
+
+After processing, you'll find these files in your output directory:
+
+### Core Outputs
+
+| File | Description |
+|------|-------------|
+| `confusion_model.json` | Character-level decoder error patterns by mode and SNR |
+| `priors.json` | Callsign frequency counts (how often each call appears) |
+
+### Spotter Reliability
+
+| File | Description |
+|------|-------------|
+| `spotter_reliability.json` | Full reliability data with band/mode breakdowns |
+| `spotter_reliability.txt` | Simple format: `SKIMMER RELIABILITY` |
+| `spotter_reliability_cw.txt` | CW-only reliability scores |
+| `spotter_reliability_rtty.txt` | RTTY-only reliability scores |
+
+### Band/Segment Priors
+
+| File | Description |
+|------|-------------|
+| `band_priors.json` | Callsign counts per amateur band |
+| `segment_priors.json` | Callsign counts per frequency segment |
+| `call_quality_priors.txt` | Simple format for Go integration |
+
+## Configuration (Optional)
+
+For most users, the defaults work well. Create `config.json` only if you need to customize:
+
+```json
+{
+  "modes": ["CW", "RTTY"],
+  "min_spotter_spots": 100,
+  "workers": 0
+}
+```
+
+### Key Options
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `modes` | `["CW", "RTTY"]` | Which transmission modes to analyze |
+| `min_spotter_spots` | `100` | Minimum spots for skimmer to be included in reliability |
+| `min_cluster_skimmers` | `4` | Minimum skimmers to establish cluster consensus |
+| `min_cluster_share_percent` | `70.0` | Percentage agreement needed for provisional truth |
+
+## Troubleshooting
+
+### "No files found"
+- Check that your input path is correct
+- Ensure the directory contains `.zip` or `.csv` files
+
+### Out of memory
+- Reduce `--workers` to `1` or `2`
+- Process fewer files at a time
+
+### Processing is slow
+- Use `--workers 0` to enable parallel processing
+- Ensure you're not running on a single core (`--workers 1` is default)
+
+### Missing mode data
+- RBN uses `tx_mode` column for CW/RTTY (not the `mode` column)
+- The tool handles this automatically
+
+## Go Runtime Integration
+
+The simple text formats are designed for direct use with Go's correction system:
+
+**spotter_reliability_cw.txt** / **spotter_reliability_rtty.txt**:
+```
+W3LPL 0.97
+N0RZA 0.90
+K1TTT 0.85
+```
+
+**call_quality_priors.txt**:
+```
+K3LR 5
+W1XYZ 4
+N0RZA 3
+```
+
 ## Features
 
 - Analyzes millions of RBN spots from contest data
@@ -13,186 +221,7 @@ An offline Python tool that analyzes large volumes of RBN (Reverse Beacon Networ
 - **Frequency segment priors** - callsign counts for CW/RTTY segments within bands
 - **Parallel processing** - multi-core support for faster analysis of large datasets
 - Memory-efficient processing with chunked CSV reading
-- Outputs both JSON (for analysis) and simple text formats (for Go runtime integration)
-
-## Installation
-
-```bash
-pip install -e .
-```
-
-## Usage
-
-```bash
-# Single file
-rbn-train --input data/cqww_2023.csv --output-dir output/
-
-# Directory
-rbn-train --input data/ --output-dir output/
-
-# Glob pattern
-rbn-train --input "data/cqww_*.csv" --output-dir output/
-
-# With config file
-rbn-train --input data/ --output-dir output/ --config config.json
-
-# Enable parallel processing with 4 workers
-rbn-train --input data/ --output-dir output/ --workers 4
-
-# Auto-detect worker count (uses CPU count - 1)
-rbn-train --input data/ --output-dir output/ --workers 0
-```
-
-## Output Files
-
-### Core Outputs
-
-| File | Format | Description |
-|------|--------|-------------|
-| `confusion_model.json` | JSON | Character-level error statistics by mode and SNR band |
-| `priors.json` | JSON | Global callsign frequency counts |
-
-### Extended Outputs
-
-| File | Format | Description |
-|------|--------|-------------|
-| `spotter_reliability.json` | JSON | Per-skimmer accuracy metrics with band/mode breakdown |
-| `spotter_reliability.txt` | Text | Simple `SKIMMER RELIABILITY` format for Go integration |
-| `band_priors.json` | JSON | Callsign counts per amateur band |
-| `call_quality_priors.txt` | Text | Simple `CALL SCORE [FREQ_KHZ]` format for Go integration |
-| `segment_priors.json` | JSON | Callsign counts per frequency segment (CW/RTTY) |
-
-### Output Structure Examples
-
-**spotter_reliability.json:**
-```json
-{
-  "min_spots_threshold": 100,
-  "skimmers_total": 500,
-  "skimmers_included": 350,
-  "skimmers": {
-    "W3LPL": {"total": 50000, "exact": 48500, "reliability": 0.97},
-    "N0RZA": {"total": 12000, "exact": 10800, "reliability": 0.90}
-  },
-  "by_band": {
-    "20m": {"W3LPL": {"total": 15000, "exact": 14800, "reliability": 0.987}}
-  },
-  "by_mode": {
-    "CW": {"W3LPL": {"total": 45000, "exact": 44000, "reliability": 0.978}}
-  }
-}
-```
-
-**band_priors.json:**
-```json
-{
-  "bands": ["160m", "80m", "40m", "20m", "15m", "10m"],
-  "global": {"K3LR": 1500, "W1XYZ": 800},
-  "by_band": {
-    "20m": {"K3LR": 500, "W1XYZ": 200},
-    "40m": {"K3LR": 300, "W1XYZ": 400}
-  }
-}
-```
-
-## Configuration
-
-Create a `config.json` file to customize analysis parameters:
-
-```json
-{
-  "cluster_time_seconds": 60,
-  "cluster_freq_bin_hz": 500,
-  "min_cluster_skimmers": 4,
-  "min_cluster_share_percent": 70.0,
-  "stability_freq_bin_hz": 1000,
-  "stability_min_clusters": 5,
-  "stability_min_share_percent": 80.0,
-  "modes": ["CW", "RTTY"],
-  "snr_bands": [-999.0, 0.0, 6.0, 12.0, 18.0, 24.0, 999.0],
-  "output_spotter_reliability": true,
-  "output_band_priors": true,
-  "output_segment_priors": true,
-  "min_spotter_spots": 100,
-  "output_simple_formats": true,
-  "workers": 1,
-  "parallel_chunk_size": 1000
-}
-```
-
-### Configuration Options
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `output_spotter_reliability` | `true` | Generate spotter reliability analysis |
-| `output_band_priors` | `true` | Generate band-specific priors |
-| `output_segment_priors` | `true` | Generate frequency segment priors |
-| `min_spotter_spots` | `100` | Minimum spots for skimmer to be included in reliability |
-| `output_simple_formats` | `true` | Generate Go-compatible text formats |
-| `workers` | `1` | Number of parallel workers (0=auto-detect, 1=sequential) |
-| `parallel_chunk_size` | `1000` | Number of clusters per parallel batch |
-
-## Go Runtime Integration
-
-The simple text formats are designed for direct use with Go's correction system:
-
-**spotter_reliability.txt** - Load with `LoadSpotterReliability()`:
-```
-W3LPL 0.97
-N0RZA 0.90
-K1TTT 0.85
-```
-
-**call_quality_priors.txt** - Load with `LoadCallQualityPriors()`:
-```
-K3LR 5
-W1XYZ 4
-N0RZA 3 14050
-```
-
-## Parallel Processing
-
-The tool supports parallel processing to speed up analysis of large datasets. When enabled, the following operations run in parallel across multiple CPU cores:
-
-- **Provisional truth labeling** - Cluster consensus computation
-- **Truth refinement** - Stability-based callsign correction
-- **Confusion model building** - Character error pattern extraction
-- **Spotter reliability** - Per-skimmer accuracy computation
-
-### Usage
-
-```bash
-# Use 4 parallel workers
-rbn-train --input data/ --output-dir output/ --workers 4
-
-# Auto-detect optimal worker count (CPU cores - 1)
-rbn-train --input data/ --output-dir output/ --workers 0
-```
-
-### Performance Notes
-
-- Parallelization provides the most benefit with large datasets (100K+ spots)
-- On a 4-core machine, expect 2-3x speedup for compute-intensive operations
-- Data loading remains sequential (I/O bound, not CPU bound)
-- Memory usage scales with worker count due to process forking
-
-### Configuration via JSON
-
-```json
-{
-  "workers": 4,
-  "parallel_chunk_size": 1000
-}
-```
-
-- `workers`: Number of worker processes (default: 1 = sequential)
-- `parallel_chunk_size`: Clusters per batch (larger = less overhead, more memory)
-
-## Requirements
-
-- Python 3.10+
-- pandas >= 2.0.0
-- numpy >= 1.24.0
+- Automatic zip file extraction
 
 ## Testing
 
