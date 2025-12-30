@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+.hypothesis/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Output files (large generated data)
+output/
+output_combined/
+rbn_logs/
+*.csv
+*.zip
+
+# Temp files
+*.tmp
+*.bak
+create_mode_files.py
+
+# Kiro specs
+.kiro/
+
+# Test output
+test_output/
+
+# Duplicate nested directories (cleanup artifacts)
+rbn_train/rbn_train/
+tests/tests/
